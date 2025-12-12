@@ -23,8 +23,6 @@ pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\popdensity.gpkg"
 transit_stops = r"C:\Users\Sarah\Documents\GitHub\geog489-final\bus_stops.gpkg"
 existing_pantries = r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantries.gpkg"
 
-crs4326 = QgsCoordinateReferenceSystem("EPSG:4326")
-
 # Create QGIS Vector Layers - we might want to create a class for this where we can check if the layer is valid
 buildings_layer = qgis.core.QgsVectorLayer(buildings, "Buildings", "ogr")
 roads_layer = qgis.core.QgsVectorLayer(roads, "Roads", "ogr")
@@ -34,11 +32,25 @@ transit_stops_layer = qgis.core.QgsVectorLayer(transit_stops, "Transit Stops", "
 existing_pantries_layer = qgis.core.QgsVectorLayer(existing_pantries, "Existing Pantries", "ogr")
 
 # HARDCODE AREA OF INTEREST
-vrtcs = [QgsPointXY(-104.94510341021355, 39.68652925768433), QgsPointXY(-104.91485641232462, 39.68516620189644), QgsPointXY(-104.92112380828358, 39.66209502341533), QgsPointXY(-104.95927317499032, 39.66896474801089)]
-aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
-aoiFeature = QgsFeature()
-aoiFeature.setGeometry(aoiPolygon)
-aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
-areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
-aoiLayer.setCrs(crs4326)
-qgis.core.QgsVectorFileWriter.writeAsVectorFormat(aoiLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\aoi.gpkg", "utf-8", crs4326, "GPKG")
+#vrtcs = [QgsPointXY(-104.94510341021355, 39.68652925768433), QgsPointXY(-104.91485641232462, 39.68516620189644), QgsPointXY(-104.92112380828358, 39.66209502341533), QgsPointXY(-104.95927317499032, 39.66896474801089)]
+#aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
+#aoiFeature = QgsFeature()
+#aoiFeature.setGeometry(aoiPolygon)
+#aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
+#areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
+#qgis.core.QgsVectorFileWriter.writeAsVectorFormat(aoiLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\aoi.gpkg", "utf-8", aoiLayer.crs(), "GPKG")
+
+# CREATE BUILDINGS BUFFER VECTOR LAYER
+building_features = buildings_layer.getFeatures()
+buffer_radius = 20
+featList = []
+for f in building_features:
+    geometry = f.geometry()
+    buffer_geometry = geometry.buffer(buffer_radius, 8)
+    feat = QgsFeature()
+    feat.setGeometry(buffer_geometry)
+    featList.append(feat)
+buildingBufLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326", "Buildings Buffer", "memory")
+building_buffer = buildingBufLayer.dataProvider().addFeatures(featList)
+qgis.core.QgsVectorFileWriter.writeAsVectorFormat(buildingBufLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_buffer.gpkg", "utf-8", buildingBufLayer.crs(), "GPKG")
+# this took a very long time but we ran in before the layer was clipped
