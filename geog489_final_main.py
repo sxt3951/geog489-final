@@ -2,7 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import qgis
 import qgis.core
-from qgis.core import QgsVectorLayer, QgsApplication
+from qgis.core import QgsVectorLayer, QgsApplication, QgsFeature, QgsGeometry, QgsPointXY, QgsCoordinateReferenceSystem
 import sys,os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStyle, QFileDialog, QDialog, QMessageBox, QSizePolicy
 from PyQt5.QtGui import QStandardItemModel, QStandardItem,  QDoubleValidator, QIntValidator
@@ -14,6 +14,7 @@ qgs = qgis.core.QgsApplication([], False)
 qgs.initQgis()
 
 
+
 # HARDCODED INPUT FILES
 buildings = r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings.gpkg"
 roads = r"C:\Users\Sarah\Documents\GitHub\geog489-final\streets.gpkg"
@@ -21,6 +22,8 @@ tree_cover = r"C:\Users\Sarah\Documents\GitHub\geog489-final\tree_canopy.gpkg"
 pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\popdensity.gpkg"
 transit_stops = r"C:\Users\Sarah\Documents\GitHub\geog489-final\bus_stops.gpkg"
 existing_pantries = r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantries.gpkg"
+
+crs4326 = QgsCoordinateReferenceSystem("EPSG:4326")
 
 # Create QGIS Vector Layers - we might want to create a class for this where we can check if the layer is valid
 buildings_layer = qgis.core.QgsVectorLayer(buildings, "Buildings", "ogr")
@@ -30,3 +33,12 @@ pop_density_layer = qgis.core.QgsVectorLayer(pop_density, "Population Density", 
 transit_stops_layer = qgis.core.QgsVectorLayer(transit_stops, "Transit Stops", "ogr")
 existing_pantries_layer = qgis.core.QgsVectorLayer(existing_pantries, "Existing Pantries", "ogr")
 
+# HARDCODE AREA OF INTEREST
+vrtcs = [QgsPointXY(-104.94510341021355, 39.68652925768433), QgsPointXY(-104.91485641232462, 39.68516620189644), QgsPointXY(-104.92112380828358, 39.66209502341533), QgsPointXY(-104.95927317499032, 39.66896474801089)]
+aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
+aoiFeature = QgsFeature()
+aoiFeature.setGeometry(aoiPolygon)
+aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
+areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
+aoiLayer.setCrs(crs4326)
+qgis.core.QgsVectorFileWriter.writeAsVectorFormat(aoiLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\aoi.gpkg", "utf-8", crs4326, "GPKG")
