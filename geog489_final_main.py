@@ -50,19 +50,20 @@ areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
 #GET CLIPPED BUILDINGS
 clipped_buildings = processing.run("qgis:clip", {"INPUT": buildings_layer, "OVERLAY": aoiLayer, "OUTPUT": "clipped_buildings"})
 buildingsClip = clipped_buildings[ "OUTPUT"]
+# need to do this for all input files
+clipped_streets = processing.run("qgis:clip", {"INPUT": roads_layer, "OVERLAY": aoiLayer, "OUTPUT": "clipped_roads"})
+streetsClip = clipped_streets[ "OUTPUT"]
 
 #FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
 query = '"BLDG_TYPE" = \'Commercial\''
 commercial_buildings = processing.run("qgis:extractbyexpression", {"INPUT": buildingsClip, "EXPRESSION": query, "METHOD": 0 , "OUTPUT": "commercial_buildings"})
 commercialBuildingsSelection = commercial_buildings[ "OUTPUT"]
 
-print(processing.algorithmHelp("native:buffer"))
 
 # CREATE BUILDINGS BUFFER VECTOR LAYER (FT) - distance is in map units which for hardcoded files in feet
-
-commercial_buildings = processing.run("native:buffer", {"INPUT": commercialBuildingsSelection, "DISTANCE": 20, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\building_buffer_new.gpkg"})
-
-
+commercial_buildings_buffer = processing.run("native:buffer", {"INPUT": commercialBuildingsSelection, "DISTANCE": 20, "OUTPUT": "buffered_buildings"})
+#need to do this for streets layer
+streets_buffer = processing.run("native:buffer", {"INPUT": streetsClip, "DISTANCE": 10, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\streets_buffer.gpkg"})
 #building_features = buildings_layer.getFeatures()
 #buffer_radius = 20
 #featList = []
@@ -76,4 +77,4 @@ commercial_buildings = processing.run("native:buffer", {"INPUT": commercialBuild
 #building_buffer = buildingBufLayer.dataProvider().addFeatures(featList)
 #qgis.core.QgsVectorFileWriter.writeAsVectorFormat(buildingBufLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_buffer.gpkg", "utf-8", buildingBufLayer.crs(), "GPKG")
 
-# this took a very long time but we ran in before the layer was clipped
+#GET VECTOR LAYER
