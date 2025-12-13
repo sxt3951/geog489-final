@@ -24,9 +24,9 @@ Processing.initialize()
 
 # HARDCODED INPUT FILES
 buildings = r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings.gpkg"
-roads = r"C:\Users\Sarah\Documents\GitHub\geog489-final\streets.gpkg"
+roads = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_streets.gpkg"
 tree_cover = r"C:\Users\Sarah\Documents\GitHub\geog489-final\tree_canopy.gpkg"
-pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\popdensity.gpkg"
+pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_popdensity.gpkg"
 transit_stops = r"C:\Users\Sarah\Documents\GitHub\geog489-final\bus_stops.gpkg"
 existing_pantries = r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantries.gpkg"
 
@@ -56,9 +56,12 @@ query = '"BLDG_TYPE" = \'Commercial\''
 commercial_buildings = processing.run("qgis:extractbyexpression", {"INPUT": buildingsClip, "EXPRESSION": query, "METHOD": 0 , "OUTPUT": "commercial_buildings"})
 commercialBuildingsSelection = commercial_buildings[ "OUTPUT"]
 
-print(processing.algorithmHelp("native:singlesidedbuffer"))
+print(processing.algorithmHelp("native:buffer"))
 
-# CREATE BUILDINGS BUFFER VECTOR LAYER
+# CREATE BUILDINGS BUFFER VECTOR LAYER (FT) - distance is in map units which for hardcoded files in feet
+
+commercial_buildings = processing.run("native:buffer", {"INPUT": commercialBuildingsSelection, "DISTANCE": 20, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\building_buffer_new.gpkg"})
+
 
 #building_features = buildings_layer.getFeatures()
 #buffer_radius = 20
