@@ -3,7 +3,8 @@ import geopandas as gpd
 import pandas as pd
 import qgis
 import qgis.core
-from qgis.core import QgsVectorLayer, QgsApplication, QgsFeature, QgsGeometry, QgsPointXY, QgsCoordinateReferenceSystem
+from qgis.core import *
+#QgsVectorLayer, QgsApplication, QgsFeature, QgsGeometry, QgsPointXY, QgsCoordinateReferenceSystem, QgsFeatureRequest
 import sys,os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStyle, QFileDialog, QDialog, QMessageBox, QSizePolicy
 from PyQt5.QtGui import QStandardItemModel, QStandardItem,  QDoubleValidator, QIntValidator
@@ -11,15 +12,15 @@ from PyQt5.QtCore import Qt
 
 app = QApplication(sys.argv)
 qgis_prefix = os.getenv("QGIS_PREFIX_PATH")
+qgis.core.QgsApplication.setPrefixPath(qgis_prefix, True)
 qgs = qgis.core.QgsApplication([], False)
 qgs.initQgis()
 
-sys.path.append(os.path.join(qgis_prefix, "python"))
 sys.path.append(os.path.join(qgis_prefix, "python", "plugins"))
 import processing
 from processing.core.Processing import Processing
 Processing.initialize()
-
+# qgis.core.QgsApplication.processingRegistry().addProvider(qgis.analysis.QgsNativeAlgorithms())
 
 # HARDCODED INPUT FILES
 buildings = r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings.gpkg"
@@ -47,9 +48,15 @@ areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
 # qgis.core.QgsVectorFileWriter.writeAsVectorFormat(aoiLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\aoi.gpkg", "utf-8", aoiLayer.crs(), "GPKG")
 
 #GET CLIPPED BUILDINGS
-clipped_buildings = processing.run("qgis:clip", {"INPUT": buildings_layer, "OVERLAY": aoiLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\clipped_buildings.gpkg"})
+clipped_buildings = processing.run("qgis:clip", {"INPUT": buildings_layer, "OVERLAY": aoiLayer, "OUTPUT": "clipped_buildings"})
+buildingsClip = clipped_buildings[ "OUTPUT"]
 
+#FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
+query = '"BLDG_TYPE" = \'Commercial\''
+commercial_buildings = processing.run("qgis:extractbyexpression", {"INPUT": buildingsClip, "EXPRESSION": query, "METHOD": 0 , "OUTPUT": "commercial_buildings"})
+commercialBuildingsSelection = commercial_buildings[ "OUTPUT"]
 
+print(processing.algorithmHelp("native:singlesidedbuffer"))
 
 # CREATE BUILDINGS BUFFER VECTOR LAYER
 
