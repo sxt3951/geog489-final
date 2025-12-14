@@ -22,6 +22,12 @@ from processing.core.Processing import Processing
 Processing.initialize()
 # qgis.core.QgsApplication.processingRegistry().addProvider(qgis.analysis.QgsNativeAlgorithms())
 
+
+#PROCESSING LOOK UP
+# print([x.id() for x in QgsApplication.processingRegistry().algorithms() if "difference" in x.id()])
+# print(processing.algorithmHelp("native:difference"))
+
+
 # HARDCODED INPUT FILES
 buildings = r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings.gpkg"
 roads = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_streets.gpkg"
@@ -62,8 +68,11 @@ commercialBuildingsSelection = commercial_buildings[ "OUTPUT"]
 
 # CREATE BUILDINGS BUFFER VECTOR LAYER (FT) - distance is in map units which for hardcoded files in feet
 commercial_buildings_buffer = processing.run("native:buffer", {"INPUT": commercialBuildingsSelection, "DISTANCE": 20, "OUTPUT": "buffered_buildings"})
+bufferedBuildings = commercial_buildings_buffer[ "OUTPUT"]
 #need to do this for streets layer
-streets_buffer = processing.run("native:buffer", {"INPUT": streetsClip, "DISTANCE": 10, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\streets_buffer.gpkg"})
+streets_buffer = processing.run("native:buffer", {"INPUT": streetsClip, "DISTANCE": 20, "OUTPUT": "streets_buffer"})
+bufferedStreets = streets_buffer[ "OUTPUT"]
+
 #building_features = buildings_layer.getFeatures()
 #buffer_radius = 20
 #featList = []
@@ -77,4 +86,10 @@ streets_buffer = processing.run("native:buffer", {"INPUT": streetsClip, "DISTANC
 #building_buffer = buildingBufLayer.dataProvider().addFeatures(featList)
 #qgis.core.QgsVectorFileWriter.writeAsVectorFormat(buildingBufLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_buffer.gpkg", "utf-8", buildingBufLayer.crs(), "GPKG")
 
-#GET VECTOR LAYER
+#GET VECTOR LAYER THAT IS THE BUFFERED AREA AROUND COMMERCIAL BUILDINGS THAT IS OUTSIDE STREET BUFFER
+buildBufferSubBuildings = processing.run("native:difference", {"INPUT": bufferedBuildings , "OVERLAY": commercialBuildingsSelection, "OUTPUT": r"bufferedSubBuildings"})
+bufferSubBuildings = buildBufferSubBuildings[ "OUTPUT"]
+
+bufferSubStreetBuffer = processing.run("native:difference", {"INPUT": bufferSubBuildings , "OVERLAY": bufferedStreets, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\buffer_only_streets.gpkg"})
+bufferSubStreet = bufferSubStreetBuffer[ "OUTPUT"]
+
