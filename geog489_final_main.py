@@ -24,8 +24,8 @@ Processing.initialize()
 
 
 #PROCESSING LOOK UP
-# print([x.id() for x in QgsApplication.processingRegistry().algorithms() if "difference" in x.id()])
-# print(processing.algorithmHelp("native:difference"))
+# print([x.id() for x in QgsApplication.processingRegistry().algorithms() if "convert" in x.id()])
+# print(processing.algorithmHelp("gdal:convertformat"))
 
 
 # HARDCODED INPUT FILES
@@ -87,9 +87,19 @@ bufferedStreets = streets_buffer[ "OUTPUT"]
 #qgis.core.QgsVectorFileWriter.writeAsVectorFormat(buildingBufLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_buffer.gpkg", "utf-8", buildingBufLayer.crs(), "GPKG")
 
 #GET VECTOR LAYER THAT IS THE BUFFERED AREA AROUND COMMERCIAL BUILDINGS THAT IS OUTSIDE STREET BUFFER
-buildBufferSubBuildings = processing.run("native:difference", {"INPUT": bufferedBuildings , "OVERLAY": commercialBuildingsSelection, "OUTPUT": r"bufferedSubBuildings"})
+buildBufferSubBuildings = processing.run("native:difference", {"INPUT": bufferedBuildings , "OVERLAY": commercialBuildingsSelection, "OUTPUT": "memory:"})
 bufferSubBuildings = buildBufferSubBuildings[ "OUTPUT"]
 
-bufferSubStreetBuffer = processing.run("native:difference", {"INPUT": bufferSubBuildings , "OVERLAY": bufferedStreets, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\buffer_only_streets.gpkg"})
+print("After building difference:", bufferSubBuildings.featureCount())
+
+bufferSubStreetBuffer = processing.run("native:difference", {"INPUT": bufferSubBuildings , "OVERLAY": bufferedStreets, "OUTPUT": "memory:"})
 bufferSubStreet = bufferSubStreetBuffer[ "OUTPUT"]
 
+print("After street difference:", bufferSubStreet.featureCount())
+
+#CREATE RASTER FROM PREVIOUS VECTOR
+extent = aoiLayer.extent()
+extent_string = f"{extent.xMinimum()},{extent.xMaximum()},{extent.yMinimum()},{extent.yMaximum()} [{aoiLayer.crs().authid()}]"
+bufferRaster = processing.run("gdal:rasterize", {"INPUT": bufferSubStreet, "FIELD": "OBJECTID", "BURN": 1, "UNITS": 1, "WIDTH": 10, "HEIGHT":10, "EXTENT": extent_string, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\bufferRaster.tif"})
+bufferRaster = bufferRaster[ "OUTPUT"]
+print("After rasterize:", bufferRaster)
