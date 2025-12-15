@@ -106,7 +106,45 @@ for parcel in commercialOutsidePantriesLayer.getFeatures():
 
 commercialOutsidePantriesLayer.commitChanges()
 
-QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+# QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+
+# FILTER POP DENSITY BY DENSITY
+query = '"popdensity" > 15000'
+clippedPopDensity = [layer for layer in clipped_layers if "Population_Density" in os.path.basename(layer.name())][0]
+popDensity = processing.run("qgis:extractbyexpression", {"INPUT": clippedPopDensity , "EXPRESSION": query, "OUTPUT": "memory:"})
+popDensityLayer = popDensity[ "OUTPUT"]
+
+#ADD FIELD TO PARCELS FOR POPULATION DENSITY SCORE, ADD THE SCORE
+popDensity_layer = popDensityLayer
+popDensityScore = [(0, 1), (2500, 0.7), (5000, 0.3)]
+buffers = []
+for distance, scoreVal in popDensityScore:
+    popDensityScore = processing.run("native:buffer", {"INPUT": popDensity_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
+    popDensityBuffer = popDensityScore[ "OUTPUT"]
+    buffer_geom = next(popDensityBuffer.getFeatures()).geometry()
+    buffers.append((buffer_geom, scoreVal))
+
+commercialOutsidePantriesLayer.startEditing()
+
+new_field = QgsField("Pop_Density_Score", QVariant.Double)
+commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
+commercialOutsidePantriesLayer.updateFields()
+
+popDensityScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Pop_Density_Score")
+
+for parcel in commercialOutsidePantriesLayer.getFeatures():
+    pop_density_score = 0
+    for bufferGeom, score in buffers:
+        if parcel.geometry().intersects(bufferGeom):
+            pop_density_score = score
+            break
+    commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), popDensityScoreIndex, pop_density_score)
+
+commercialOutsidePantriesLayer.commitChanges()
+
+# QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+
+
 
 # IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
 # clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
