@@ -92,19 +92,18 @@ commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
 
 # IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
 clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
-transitBuffer = processing.run("native:buffer", {"INPUT": clippedTransitStopsLayer, "DISTANCE": 500, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\transit_buffer.gpkg"})
+transitBuffer = processing.run("native:buffer", {"INPUT": clippedTransitStopsLayer, "DISTANCE": 500, "OUTPUT": "memory:"})
 transitBufferLayer = transitBuffer[ "OUTPUT"]
-commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_transit.gpkg"})
+commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": "memory:"})
 commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
 
 
 # IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
-# for layer in clipped_layers:
-#     if "Pantries" in os.path.basename(layer):
-#         pantriesBuffer = processing.run("native:buffer", {"INPUT": layer, "DISTANCE": 1000, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantry_buffer.gpkg"})
-#         pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
-#         commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialOutsidePantries.gpkg"})
-#         commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
+clippedPantriesLayer = [layer for layer in clipped_layers if "Existing_Pantries" in os.path.basename(layer.name())][0]
+pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer, "DISTANCE": 1000, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantry_buffer.gpkg"})
+pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
+commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialOutsidePantries.gpkg"})
+commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
 
 # # CREATE BUILDINGS BUFFER VECTOR LAYER (FT) - distance is in map units which for hardcoded files in feet
 # commercial_buildings_buffer = processing.run("native:buffer", {"INPUT": commercialBuildingsSelection, "DISTANCE": 20, "OUTPUT": "buffered_buildings"})
