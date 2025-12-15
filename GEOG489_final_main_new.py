@@ -8,7 +8,7 @@ from qgis.core import *
 import sys,os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStyle, QFileDialog, QDialog, QMessageBox, QSizePolicy
 from PyQt5.QtGui import QStandardItemModel, QStandardItem,  QDoubleValidator, QIntValidator
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QVariant
 
 app = QApplication(sys.argv)
 qgis_prefix = os.getenv("QGIS_PREFIX_PATH")
@@ -59,9 +59,9 @@ for layer in layers:
     reprolayer.setName(f"clipped_{layer.name()}")
     clipped_layers.append(reprolayer)
 
-print (clipped_layers)
-for layer in clipped_layers:
-    print(layer)
+# print (clipped_layers)
+# for layer in clipped_layers:
+#     print(layer)
 
 
 #FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
@@ -70,12 +70,45 @@ clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path
 commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
 commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
 
+#ADD FIELD TO PARCELS FOR TRANSIT SCORE, ADD THE SCORE
+transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0]
+distanceScore = [(750, 1), (1500, 0.7), (3000, 0.3)]
+buffers = []
+for distance, scoreVal in distanceScore:
+    transitScore = processing.run("native:buffer", {"INPUT": transit_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
+    transitBuffer = transitScore[ "OUTPUT"]
+    buffer_geom = next(transitBuffer.getFeatures()).geometry()
+    buffers.append((buffer_geom, scoreVal))
+
+commercialBuildingsLayer.startEditing()
+
+new_field = QgsField("Transit_Score", QVariant.Double)
+commercialBuildingsLayer.dataProvider().addAttributes([new_field])
+commercialBuildingsLayer.updateFields()
+
+transitScoreIndex = commercialBuildingsLayer.fields().indexOf("Transit_Score")
+
+for parcel in commercialBuildingsLayer.getFeatures():
+    transit_score = 0
+    for bufferGeom, score in buffers:
+        if parcel.geometry().intersects(bufferGeom):
+            transit_score = score
+            break
+    commercialBuildingsLayer.changeAttributeValue(parcel.id(), transitScoreIndex, transit_score)
+
+commercialBuildingsLayer.commitChanges()
+
+QgsVectorFileWriter.writeAsVectorFormat(commercialBuildingsLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+
+# commercialBuildingsLayer.dataProvider().addAttributes([new_field])
+# qgis.core.QgsVectorFileWriter.writeAsVectorFormat(commercialBuildingsLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+
 # IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
-clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
-transitBuffer = processing.run("native:buffer", {"INPUT": clippedTransitStopsLayer, "DISTANCE": 500, "OUTPUT": "memory:"})
-transitBufferLayer = transitBuffer[ "OUTPUT"]
-commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": "memory:"})
-commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
+# clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
+# transitBuffer = processing.run("native:buffer", {"INPUT": clippedTransitStopsLayer, "DISTANCE": 500, "OUTPUT": "memory:"})
+# transitBufferLayer = transitBuffer[ "OUTPUT"]
+# commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": "memory:"})
+# commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
 
 
 # IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
@@ -84,3 +117,5 @@ pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer,
 pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
 commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialOutsidePantries.gpkg"})
 commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
+
+
