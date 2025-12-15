@@ -144,6 +144,31 @@ commercialOutsidePantriesLayer.commitChanges()
 
 # QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
 
+#CALCULATE SUITABILITY SCORE
+
+commercialOutsidePantriesLayer.startEditing()
+
+new_field = QgsField("Suitability", QVariant.Double)
+commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
+commercialOutsidePantriesLayer.updateFields()
+
+suitabilityIndex = commercialOutsidePantriesLayer.fields().indexOf("Suitability")
+
+# hard-coded user input weights
+transit_weight = 30
+normalized_transit_weight = (transit_weight / 100)
+pop_density_weight = 70
+normalized_pop_density_weight = (pop_density_weight / 100)
+
+for parcel in commercialOutsidePantriesLayer.getFeatures():
+    suitability = (parcel.attribute("Transit_Score") * normalized_transit_weight) + (parcel.attribute("Pop_Density_Score") * normalized_pop_density_weight)
+    commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), suitabilityIndex, suitability)
+
+commercialOutsidePantriesLayer.commitChanges()
+
+QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithSuitabilityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+
+
 
 
 # IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
