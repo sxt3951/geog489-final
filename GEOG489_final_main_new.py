@@ -64,11 +64,19 @@ for layer in layers:
 #     print(layer)
 
 
+
 #FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
 query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
 clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
 commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
 commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
+
+# IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
+clippedPantriesLayer = [layer for layer in clipped_layers if "Existing_Pantries" in os.path.basename(layer.name())][0]
+pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer, "DISTANCE": 1000, "OUTPUT": "memory:"})
+pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
+commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
+commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
 
 #ADD FIELD TO PARCELS FOR TRANSIT SCORE, ADD THE SCORE
 transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0]
@@ -80,28 +88,25 @@ for distance, scoreVal in distanceScore:
     buffer_geom = next(transitBuffer.getFeatures()).geometry()
     buffers.append((buffer_geom, scoreVal))
 
-commercialBuildingsLayer.startEditing()
+commercialOutsidePantriesLayer.startEditing()
 
 new_field = QgsField("Transit_Score", QVariant.Double)
-commercialBuildingsLayer.dataProvider().addAttributes([new_field])
-commercialBuildingsLayer.updateFields()
+commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
+commercialOutsidePantriesLayer.updateFields()
 
-transitScoreIndex = commercialBuildingsLayer.fields().indexOf("Transit_Score")
+transitScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Transit_Score")
 
-for parcel in commercialBuildingsLayer.getFeatures():
+for parcel in commercialOutsidePantriesLayer.getFeatures():
     transit_score = 0
     for bufferGeom, score in buffers:
         if parcel.geometry().intersects(bufferGeom):
             transit_score = score
             break
-    commercialBuildingsLayer.changeAttributeValue(parcel.id(), transitScoreIndex, transit_score)
+    commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), transitScoreIndex, transit_score)
 
-commercialBuildingsLayer.commitChanges()
+commercialOutsidePantriesLayer.commitChanges()
 
-QgsVectorFileWriter.writeAsVectorFormat(commercialBuildingsLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-
-# commercialBuildingsLayer.dataProvider().addAttributes([new_field])
-# qgis.core.QgsVectorFileWriter.writeAsVectorFormat(commercialBuildingsLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
 
 # IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
 # clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
@@ -109,13 +114,5 @@ QgsVectorFileWriter.writeAsVectorFormat(commercialBuildingsLayer, r"C:\Users\Sar
 # transitBufferLayer = transitBuffer[ "OUTPUT"]
 # commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": "memory:"})
 # commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
-
-
-# IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
-clippedPantriesLayer = [layer for layer in clipped_layers if "Existing_Pantries" in os.path.basename(layer.name())][0]
-pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer, "DISTANCE": 1000, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantry_buffer.gpkg"})
-pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
-commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialOutsidePantries.gpkg"})
-commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
 
 
