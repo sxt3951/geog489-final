@@ -62,14 +62,19 @@ areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
 #GET CLIPPED LAYERS
 clipped_layers = []
 for layer in layers:
-    reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": layer, "CRS": "EPSG:4326", "OUTPUT": "memory:"})
-    reprojectedLayer = reprojectcrs[ "OUTPUT"]
-    clipped_layer = processing.run("qgis:clip", {"INPUT": reprojectedLayer, "OVERLAY": aoiLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\clipped_" + layer.name()})
-    clipped_layers.append(clipped_layer[ "OUTPUT"])
+    # print(layer.name())
+    layerClip = processing.run("qgis:clip", {"INPUT": layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})
+    clipLayer = layerClip["OUTPUT"]
+    # print(layerClip["OUTPUT"])
+    reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clipLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})
+    reprolayer = reprojectcrs["OUTPUT"]
+    reprolayer.setName(f"clipped_{layer.name()}")
+    clipped_layers.append(reprolayer)
 
 print (clipped_layers)
+for layer in clipped_layers:
+    print(layer)
 
-#"clipped_" + layer.name()
 
 # clipped_buildings = processing.run("qgis:clip", {"INPUT": buildings_layer, "OVERLAY": aoiLayer, "OUTPUT": "clipped_buildings"})
 # buildingsClip = clipped_buildings[ "OUTPUT"]
@@ -81,23 +86,17 @@ print (clipped_layers)
 
 #FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
 query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
-# for layer in clipped_layers:
-#     if "Parcel" in os.path.basename(layer):
-#         print(layer)
-# commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": "clipped_parcels.gpkg", "EXPRESSION": query, "OUTPUT": "memory:"})
-# commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
-    # else:
-    #     print("No parcels found")
+clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
+commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
+commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
 
 # IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
-# for layer in clipped_layers:
-#     if "Transit" in os.path.basename(layer):
-# transitBuffer = processing.run("native:buffer", {"INPUT": "clipped_Transit_Stops.gpkg", "DISTANCE": 500, "OUTPUT": "memory:"})
-# transitBufferLayer = transitBuffer[ "OUTPUT"]
-# commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_transit.gpkg"})
-# commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
-    # else:
-    #     print("No transit stops found")
+clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
+transitBuffer = processing.run("native:buffer", {"INPUT": clippedTransitStopsLayer, "DISTANCE": 500, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\transit_buffer.gpkg"})
+transitBufferLayer = transitBuffer[ "OUTPUT"]
+commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": r"C:\Users\Sarah\Documents\GitHub\geog489-final\buildings_transit.gpkg"})
+commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
+
 
 # IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
 # for layer in clipped_layers:
