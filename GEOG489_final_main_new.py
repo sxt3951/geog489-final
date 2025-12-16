@@ -9,7 +9,8 @@ from PyQt5.QtGui import QStandardItemModel, QStandardItem,  QDoubleValidator, QI
 from PyQt5.QtCore import Qt, QVariant, QMetaType
 from qgis.gui import QgsMapToolPan, QgsMapToolZoom
 
-from ui_food_pantry_location import Ui_MainWindow
+import ui_food_pantry_location
+import map_pop_up
 
 # app = QApplication(sys.argv)
 # qgis_prefix = os.getenv("QGIS_PREFIX_PATH")
@@ -27,39 +28,57 @@ from ui_food_pantry_location import Ui_MainWindow
 # print(processing.algorithmHelp("gdal:convertformat"))
 
 def findSuitableParcels():
-    # parcels = r"C:\Users\Sarah\Documents\GitHub\geog489-final\parcels.gpkg"
-    # poverty = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_poverty.gpkg"
-    # pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_popdensity.gpkg"
-    # transit_stops = r"C:\Users\Sarah\Documents\GitHub\geog489-final\bus_stops.gpkg"
-    # existing_pantries = r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantries.gpkg"
+    # COLLECT AOI INPUT COORDS AND CREATE AOI POLYGON
+    def createAOIPolygon(coords1, coords2, coords3, coords4):
+        coordsList = [coords1, coords2, coords3, coords4]
 
-    # parcels_layer = qgis.core.QgsVectorLayer(parcels, "Parcels", "ogr")
-    # poverty_layer = qgis.core.QgsVectorLayer(poverty, "Poverty", "ogr")
-    # pop_density_layer = qgis.core.QgsVectorLayer(pop_density, "Population_Density", "ogr")
-    # transit_stops_layer = qgis.core.QgsVectorLayer(transit_stops, "Transit_Stops", "ogr")
-    # existing_pantries_layer = qgis.core.QgsVectorLayer(existing_pantries, "Existing_Pantries", "ogr")
+        # CREATE QGS POINTS FROM COORDS
+        vrtcs = []
+        for coord in coordsList:
+            coords = coord.split(",")
+            point = QgsPointXY(float(coords[0]), float(coords[1]))
+            vrtcs.append(point)
 
-    # layers = [parcels_layer, poverty_layer, pop_density_layer, transit_stops_layer, existing_pantries_layer]
+        aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
+        aoiFeature = QgsFeature()
+        aoiFeature.setGeometry(aoiPolygon)
+        aoiLayer = qgis.core.QgsVectorLayer(
+            "Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest",
+            "memory")
+        aoiLayer.dataProvider().addFeatures([aoiFeature])
+        return aoiLayer
 
-    # HARDCODE AREA OF INTEREST
-    # vrtcs = [QgsPointXY(-104.99517, 39.76876), QgsPointXY(-104.97323, 39.77292), QgsPointXY(-104.97323, 39.74882), QgsPointXY(-104.99517, 39.75144)]
-    # aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
-    # aoiFeature = QgsFeature()
-    # aoiFeature.setGeometry(aoiPolygon)
-    # aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
-    # areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
+        # -104.99517, 39.76876
+        # -104.97323, 39.77292
+        # -104.97323, 39.74882
+        # -104.99517, 39.75144
 
-    # #GET CLIPPED LAYERS
-    # clipped_layers = []
-    # for layer in layers:
-    #     # print(layer.name())
-    #     layerClip = processing.run("qgis:clip", {"INPUT": layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})
-    #     clipLayer = layerClip["OUTPUT"]
-    #     # print(layerClip["OUTPUT"])
-    #     reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clipLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})
-    #     reprolayer = reprojectcrs["OUTPUT"]
-    #     reprolayer.setName(f"clipped_{layer.name()}")
-    #     clipped_layers.append(reprolayer)
+    #GET THE LAYERS FROM THE USER INPUT
+    parcels = parcelsLineEdit.text()
+    poverty = povertyLineEdit.text()
+    pop_density = pop_densityLineEdit.text()
+    transit_stops = transitLineEdit.text()
+    existing_pantries = pantryLineEdit.text()
+
+    parcels_layer = qgis.core.QgsVectorLayer(parcels, "Parcels", "ogr")
+    poverty_layer = qgis.core.QgsVectorLayer(poverty, "Poverty", "ogr")
+    pop_density_layer = qgis.core.QgsVectorLayer(pop_density, "Population_Density", "ogr")
+    transit_stops_layer = qgis.core.QgsVectorLayer(transit_stops, "Transit_Stops", "ogr")
+    existing_pantries_layer = qgis.core.QgsVectorLayer(existing_pantries, "Existing_Pantries", "ogr")
+
+    layers = [parcels_layer, poverty_layer, pop_density_layer, transit_stops_layer, existing_pantries_layer]
+
+    # FUNCTION TO CLIP LAYER TO AREA OF INTEREST AND REPROJECT
+    def clipLayerToAOI(aoiLayer, layer, name):
+        vector_layer = qgis.core.QgsVectorLayer(layer, "Parcels", "ogr")
+        clippedLayer = processing.run("qgis:clip", {"INPUT": vector_layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})[
+            "OUTPUT"]
+        reprojectcrs = processing.run("native:reprojectlayer",
+                                      {"INPUT": clippedLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"),
+                                       "OUTPUT": "memory:"})["OUTPUT"]
+        reprojectcrs.setName(f"clipped_{vector_layer.name()}")
+        # QgsVectorFileWriter.writeAsVectorFormat(reprojectcrs, r"C:\Users\Sarah\Documents\GitHub\geog489-final\clipped_tb_test.gpkg", "utf-8", reprojectcrs.crs(), "GPKG")
+        return reprojectcrs
 
     #FUNCTION FOR FILTERING LAYER BY QUERY AND EXTRACTING THOSE FEATURES TO A NEW MEMORY LAYER
     def filterByQuery(layersList, layerNameSearch, query):
@@ -99,6 +118,17 @@ def findSuitableParcels():
             parcelLayer.changeAttributeValue(parcel.id(), fieldIndex, updatedScore)
         parcelLayer.commitChanges() #save the changes to the memory layer
         return parcelLayer
+
+    # GET CLIPPED LAYERS
+    clipped_layers = []
+    AreaOfInterest = createAOIPolygon(ui.coord1lineEdit.text(), ui.coord2lineEdit.text(), ui.coord3lineEdit.text(), ui.coord4lineEdit.text())
+    for layer in layers:
+        layerClip = processing.run("qgis:clip", {"INPUT": layer, "OVERLAY": AreaOfInterest, "OUTPUT": "memory:"})
+        clipLayer = layerClip["OUTPUT"]
+        reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clipLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})
+        reprolayer = reprojectcrs["OUTPUT"]
+        reprolayer.setName(f"clipped_{layer.name()}")
+        clipped_layers.append(reprolayer)
 
     filteredParcels = filterByQuery(clipped_layers, "Parcels", '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\'')
     # IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
@@ -193,24 +223,24 @@ class MyWnd(QMainWindow):
     def pan(self):
         self.canvas.setMapTool(self.toolPan)
 
-    #FUNCTION TO CLIP LAYERS TO AREA OF INTEREST AND REPROJECT
-def clipLayerToAOI(layer, name):
-    vector_layer = qgis.core.QgsVectorLayer(layer, "Parcels", "ogr")
-    clippedLayer = processing.run("qgis:clip", {"INPUT": vector_layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})["OUTPUT"]
-    reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clippedLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})["OUTPUT"]
-    reprojectcrs.setName(f"clipped_{vector_layer.name()}")
-    # QgsVectorFileWriter.writeAsVectorFormat(reprojectcrs, r"C:\Users\Sarah\Documents\GitHub\geog489-final\clipped_tb_test.gpkg", "utf-8", reprojectcrs.crs(), "GPKG")
-    return reprojectcrs
 
+#FUNCTION TO GET PARCEL FILE FROM USER
 def selectParcelGPKGfile():       # get the input file from the user and add the path to the text box
     fileName, _ = QFileDialog.getOpenFileName(mainWindow,"Select GPKG file", "","GPKG (*.gpkg)")
     if fileName:
         ui.parcelsLineEdit.setText(fileName)
-        gpkgName = os.path.basename(fileName)
-        clipped = clipLayerToAOI(fileName, gpkgName)
-        #update the map widget to show the clipped layer
-        canvas.setLayers([clipped])
 
+#FUNCTION TO GET THE POVERTY FILE FROM THE USER
+def selectPovertyGPKGFile():
+    fileName, _ = QFileDialog.getOpenFileName(mainWindow,"Select GPKG file", "","GPKG (*.gpkg)")
+    if fileName:
+        ui.povertyLineEdit.setText(fileName)
+
+#FUNCTION TO GET THE POPULATION DENSITY FILE FROM THE USER
+def selectPopDensityGPKGFile():
+    fileName, _ = QFileDialog.getOpenFileName(mainWindow,"Select GPKG file", "","GPKG (*.gpkg)")
+    if fileName:
+        ui.pop_densityLineEdit.setText(fileName)
 
 if __name__ == '__main__':
     # set up QGIS application and processing environment
@@ -233,10 +263,20 @@ if __name__ == '__main__':
     mainWindow = QMainWindow()
     ui = ui_food_pantry_location.Ui_MainWindow()
     ui.setupUi(mainWindow)
+
+    # createShapefileDialog = QDialog(mainWindow)
+    # createShapefileDialog_ui = gui_newshapefile.Ui_Dialog()
+    # createShapefileDialog_ui.setupUi(createShapefileDialog)
+
+
     # ==========================================
     # connect signals
     # ==========================================
     ui.parcelsTB.clicked.connect(selectParcelGPKGfile)
+    ui.povertyTB.clicked.connect(selectPovertyGPKGFile)
+    ui.pop_densityTB.clicked.connect(selectPopDensityGPKGFile)
+    ui.buttonBox.accepted.connect(createAOIPolygon)
+    ui.buttonBox.rejected.connect(mainWindow.close)
     # ui.povertyTB.clicked.connect(selectGPKGfile)
     # ui.pop_densityTB.clicked.connect(selectGPKGfile)
     # ui.transitTB.clicked.connect(selectGPKGfile)
@@ -248,128 +288,11 @@ if __name__ == '__main__':
     # =======================================
     # hardcoded aoi layer
     #=======================================
-    vrtcs = [QgsPointXY(-104.99517, 39.76876), QgsPointXY(-104.97323, 39.77292), QgsPointXY(-104.97323, 39.74882), QgsPointXY(-104.99517, 39.75144)]
-    aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
-    aoiFeature = QgsFeature()
-    aoiFeature.setGeometry(aoiPolygon)
-    aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
-    areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
     # =======================================
     # run app
     # =======================================
     mainWindow.show()
-    # win = MyWnd(layer)
+
+    # win = MyWnd(clipped_test)
     # win.show()
     sys.exit(app.exec_())
-
-
-#FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
-# query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
-# clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
-# commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
-# commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
-# commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
-# commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
-
-# #ADD FIELD TO PARCELS FOR TRANSIT SCORE, ADD THE SCORE
-# transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0] #select the transit layer
-# distanceScore = [(750, 1), (1500, 0.7), (3000, 0.3)] # defining distance, score values
-# buffers = [] # creating empty buffers list
-#
-# # for every distance and score in distanceScore list, create a buffer around each transit stop using distance val
-# for distance, scoreVal in distanceScore:
-#     transitScore = processing.run("native:buffer", {"INPUT": transit_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"}) # create the buffer around each transit stop, create a single geometry using dissolve = True, save the file to memory
-#     transitBuffer = transitScore[ "OUTPUT"]
-#     buffer_geom = next(transitBuffer.getFeatures()).geometry()
-#     buffers.append((buffer_geom, scoreVal))
-#
-# commercialOutsidePantriesLayer.startEditing() # start editing the memory layer
-#
-# #DECLARE THE NEW FIELD AND ADD IT TO THE LAYER
-# new_field = QgsField("Transit_Score", QVariant.Double)
-# commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
-# commercialOutsidePantriesLayer.updateFields()
-#
-# transitScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Transit_Score") # find the index of the new field
-#
-# # FOR EVERY FEATURE IN THE MEMORY LAYER, CHECK IF THE FEATURE INTERSECTS WITH ANY OF THE BUFFERS, IF SO, ASSIGN THE SCORE VALUE
-# for parcel in commercialOutsidePantriesLayer.getFeatures():
-#     transit_score = 0
-#     for bufferGeom, score in buffers:
-#         if parcel.geometry().intersects(bufferGeom):
-#             transit_score = score
-#             break
-#     commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), transitScoreIndex, transit_score)
-#
-# commercialOutsidePantriesLayer.commitChanges()
-#
-# # QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-#
-# # FILTER POP DENSITY BY DENSITY
-# query = '"popdensity" > 15000'
-# clippedPopDensity = [layer for layer in clipped_layers if "Population_Density" in os.path.basename(layer.name())][0]
-# popDensity = processing.run("qgis:extractbyexpression", {"INPUT": clippedPopDensity , "EXPRESSION": query, "OUTPUT": "memory:"})
-# popDensityLayer = popDensity[ "OUTPUT"]
-#
-# #ADD FIELD TO PARCELS FOR POPULATION DENSITY SCORE, ADD THE SCORE
-# popDensity_layer = popDensityLayer
-# popDensityScore = [(0, 1), (2500, 0.7), (5000, 0.3)]
-# buffers = []
-# for distance, scoreVal in popDensityScore:
-#     popDensityScore = processing.run("native:buffer", {"INPUT": popDensity_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
-#     popDensityBuffer = popDensityScore[ "OUTPUT"]
-#     buffer_geom = next(popDensityBuffer.getFeatures()).geometry()
-#     buffers.append((buffer_geom, scoreVal))
-#
-# commercialOutsidePantriesLayer.startEditing()
-#
-# new_field = QgsField("Pop_Density_Score", QVariant.Double)
-# commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
-# commercialOutsidePantriesLayer.updateFields()
-#
-# popDensityScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Pop_Density_Score")
-#
-# for parcel in commercialOutsidePantriesLayer.getFeatures():
-#     pop_density_score = 0
-#     for bufferGeom, score in buffers:
-#         if parcel.geometry().intersects(bufferGeom):
-#             pop_density_score = score
-#             break
-#     commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), popDensityScoreIndex, pop_density_score)
-#
-# commercialOutsidePantriesLayer.commitChanges()
-#
-# # QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-#
-# #CALCULATE SUITABILITY SCORE
-#
-# commercialOutsidePantriesLayer.startEditing()
-#
-# new_field = QgsField("Suitability", QVariant.Double)
-# commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
-# commercialOutsidePantriesLayer.updateFields()
-#
-# suitabilityIndex = commercialOutsidePantriesLayer.fields().indexOf("Suitability")
-#
-# # hard-coded user input weights
-# transit_weight = 30
-# normalized_transit_weight = (transit_weight / 100)
-# pop_density_weight = 70
-# normalized_pop_density_weight = (pop_density_weight / 100)
-#
-# for parcel in commercialOutsidePantriesLayer.getFeatures():
-#     suitability = (parcel.attribute("Transit_Score") * normalized_transit_weight) + (parcel.attribute("Pop_Density_Score") * normalized_pop_density_weight)
-#     commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), suitabilityIndex, suitability)
-#
-# commercialOutsidePantriesLayer.commitChanges()
-#
-# QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithSuitabilityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-
-
-
-# IF TRANSIT STOP ARE INCLUDED, GET THE USER INPUT MAX DISTANCE AND FIND COMMERCIAL BUILDINGS WITHIN THAT DISTANCE
-# clippedTransitStopsLayer = [layer for layer in clipped_layers if "Transit_Stops" in os.path.basename(layer.name())][0]
-# transitBuffer = processing.run("native:buffer", {"INPUT": clippedTransitStopsLayer, "DISTANCE": 500, "OUTPUT": "memory:"})
-# transitBufferLayer = transitBuffer[ "OUTPUT"]
-# commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": "memory:"})
-# commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
