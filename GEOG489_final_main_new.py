@@ -119,9 +119,25 @@ parcelsXDensityLayer = updateParcelLayer(parcelsXTransitLayer, "Pop_Density_Scor
 filteredPoverty = filterByQuery(clipped_layers, "Poverty", '"Percent_Po" >= 20')
 poverty_buffers = getBufferGeometry(filteredPoverty, [(0, 1), (15840, .5), (26400, .2)])
 parcelsXPovertyLayer = updateParcelLayer(parcelsXDensityLayer, "Poverty_Score", poverty_buffers, 60)
-QgsVectorFileWriter.writeAsVectorFormat(parcelsXDensityLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithpovscore.gpkg", "utf-8", parcelsXDensityLayer.crs(), "GPKG")
+# QgsVectorFileWriter.writeAsVectorFormat(parcelsXDensityLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithpovscore.gpkg", "utf-8", parcelsXDensityLayer.crs(), "GPKG")
 
+#CALCULATE SUITABILITY SCORE
 
+parcelsXPovertyLayer.startEditing()
+
+new_field = QgsField("Suitability", QVariant.Double)
+parcelsXPovertyLayer.dataProvider().addAttributes([new_field])
+parcelsXPovertyLayer.updateFields()
+
+suitabilityIndex = parcelsXPovertyLayer.fields().indexOf("Suitability")
+
+for parcel in parcelsXPovertyLayer.getFeatures():
+    suitability = parcel.attribute("Transit_Score") + parcel.attribute("Pop_Density_Score") + parcel.attribute("Poverty_Score")
+    parcelsXPovertyLayer.changeAttributeValue(parcel.id(), suitabilityIndex, suitability)
+
+parcelsXPovertyLayer.commitChanges()
+
+QgsVectorFileWriter.writeAsVectorFormat(parcelsXPovertyLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithSuitabilityScore.gpkg", "utf-8", parcelsXPovertyLayer.crs(), "GPKG")
 
 
 #FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
