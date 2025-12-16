@@ -3,10 +3,11 @@ import qgis
 import qgis.core
 import ui_food_pantry_location
 from qgis.core import *
-#QgsVectorLayer, QgsApplication, QgsFeature, QgsGeometry, QgsPointXY, QgsCoordinateReferenceSystem, QgsFeatureRequest
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStyle, QFileDialog, QDialog, QMessageBox, QSizePolicy
+#QgsVectorLayer, QgsApplication, QgsFeature, QgsGeometry, QgsPointXY, QgsCoordinateReferenceSystem, QgsFeatureRequest,
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStyle, QFileDialog, QDialog, QMessageBox, QSizePolicy, QAction
 from PyQt5.QtGui import QStandardItemModel, QStandardItem,  QDoubleValidator, QIntValidator
 from PyQt5.QtCore import Qt, QVariant, QMetaType
+from qgis.gui import QgsMapToolPan, QgsMapToolZoom
 
 from ui_food_pantry_location import Ui_MainWindow
 
@@ -26,39 +27,39 @@ from ui_food_pantry_location import Ui_MainWindow
 # print(processing.algorithmHelp("gdal:convertformat"))
 
 def findSuitableParcels():
-    parcels = r"C:\Users\Sarah\Documents\GitHub\geog489-final\parcels.gpkg"
-    poverty = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_poverty.gpkg"
-    pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_popdensity.gpkg"
-    transit_stops = r"C:\Users\Sarah\Documents\GitHub\geog489-final\bus_stops.gpkg"
-    existing_pantries = r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantries.gpkg"
+    # parcels = r"C:\Users\Sarah\Documents\GitHub\geog489-final\parcels.gpkg"
+    # poverty = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_poverty.gpkg"
+    # pop_density = r"C:\Users\Sarah\Documents\GitHub\geog489-final\denver_popdensity.gpkg"
+    # transit_stops = r"C:\Users\Sarah\Documents\GitHub\geog489-final\bus_stops.gpkg"
+    # existing_pantries = r"C:\Users\Sarah\Documents\GitHub\geog489-final\pantries.gpkg"
 
-    parcels_layer = qgis.core.QgsVectorLayer(parcels, "Parcels", "ogr")
-    poverty_layer = qgis.core.QgsVectorLayer(poverty, "Poverty", "ogr")
-    pop_density_layer = qgis.core.QgsVectorLayer(pop_density, "Population_Density", "ogr")
-    transit_stops_layer = qgis.core.QgsVectorLayer(transit_stops, "Transit_Stops", "ogr")
-    existing_pantries_layer = qgis.core.QgsVectorLayer(existing_pantries, "Existing_Pantries", "ogr")
+    # parcels_layer = qgis.core.QgsVectorLayer(parcels, "Parcels", "ogr")
+    # poverty_layer = qgis.core.QgsVectorLayer(poverty, "Poverty", "ogr")
+    # pop_density_layer = qgis.core.QgsVectorLayer(pop_density, "Population_Density", "ogr")
+    # transit_stops_layer = qgis.core.QgsVectorLayer(transit_stops, "Transit_Stops", "ogr")
+    # existing_pantries_layer = qgis.core.QgsVectorLayer(existing_pantries, "Existing_Pantries", "ogr")
 
-    layers = [parcels_layer, poverty_layer, pop_density_layer, transit_stops_layer, existing_pantries_layer]
+    # layers = [parcels_layer, poverty_layer, pop_density_layer, transit_stops_layer, existing_pantries_layer]
 
     # HARDCODE AREA OF INTEREST
-    vrtcs = [QgsPointXY(-104.99517, 39.76876), QgsPointXY(-104.97323, 39.77292), QgsPointXY(-104.97323, 39.74882), QgsPointXY(-104.99517, 39.75144)]
-    aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
-    aoiFeature = QgsFeature()
-    aoiFeature.setGeometry(aoiPolygon)
-    aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
-    areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
+    # vrtcs = [QgsPointXY(-104.99517, 39.76876), QgsPointXY(-104.97323, 39.77292), QgsPointXY(-104.97323, 39.74882), QgsPointXY(-104.99517, 39.75144)]
+    # aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
+    # aoiFeature = QgsFeature()
+    # aoiFeature.setGeometry(aoiPolygon)
+    # aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
+    # areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
 
-    #GET CLIPPED LAYERS
-    clipped_layers = []
-    for layer in layers:
-        # print(layer.name())
-        layerClip = processing.run("qgis:clip", {"INPUT": layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})
-        clipLayer = layerClip["OUTPUT"]
-        # print(layerClip["OUTPUT"])
-        reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clipLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})
-        reprolayer = reprojectcrs["OUTPUT"]
-        reprolayer.setName(f"clipped_{layer.name()}")
-        clipped_layers.append(reprolayer)
+    # #GET CLIPPED LAYERS
+    # clipped_layers = []
+    # for layer in layers:
+    #     # print(layer.name())
+    #     layerClip = processing.run("qgis:clip", {"INPUT": layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})
+    #     clipLayer = layerClip["OUTPUT"]
+    #     # print(layerClip["OUTPUT"])
+    #     reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clipLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})
+    #     reprolayer = reprojectcrs["OUTPUT"]
+    #     reprolayer.setName(f"clipped_{layer.name()}")
+    #     clipped_layers.append(reprolayer)
 
     #FUNCTION FOR FILTERING LAYER BY QUERY AND EXTRACTING THOSE FEATURES TO A NEW MEMORY LAYER
     def filterByQuery(layersList, layerNameSearch, query):
@@ -192,6 +193,23 @@ class MyWnd(QMainWindow):
     def pan(self):
         self.canvas.setMapTool(self.toolPan)
 
+    #FUNCTION TO CLIP LAYERS TO AREA OF INTEREST AND REPROJECT
+def clipLayerToAOI(layer, name):
+    vector_layer = qgis.core.QgsVectorLayer(layer, "Parcels", "ogr")
+    clippedLayer = processing.run("qgis:clip", {"INPUT": vector_layer, "OVERLAY": aoiLayer, "OUTPUT": "memory:"})["OUTPUT"]
+    reprojectcrs = processing.run("native:reprojectlayer", {"INPUT": clippedLayer, "TARGET_CRS": QgsCoordinateReferenceSystem("EPSG:2232"), "OUTPUT": "memory:"})["OUTPUT"]
+    reprojectcrs.setName(f"clipped_{vector_layer.name()}")
+    # QgsVectorFileWriter.writeAsVectorFormat(reprojectcrs, r"C:\Users\Sarah\Documents\GitHub\geog489-final\clipped_tb_test.gpkg", "utf-8", reprojectcrs.crs(), "GPKG")
+    return reprojectcrs
+
+def selectParcelGPKGfile():       # get the input file from the user and add the path to the text box
+    fileName, _ = QFileDialog.getOpenFileName(mainWindow,"Select GPKG file", "","GPKG (*.gpkg)")
+    if fileName:
+        ui.parcelsLineEdit.setText(fileName)
+        gpkgName = os.path.basename(fileName)
+        clipped = clipLayerToAOI(fileName, gpkgName)
+        #update the map widget to show the clipped layer
+        canvas.setLayers([clipped])
 
 
 if __name__ == '__main__':
@@ -218,11 +236,24 @@ if __name__ == '__main__':
     # ==========================================
     # connect signals
     # ==========================================
-    # ui.jsonTB.clicked.connect(selectJSONfile)
+    ui.parcelsTB.clicked.connect(selectParcelGPKGfile)
+    # ui.povertyTB.clicked.connect(selectGPKGfile)
+    # ui.pop_densityTB.clicked.connect(selectGPKGfile)
+    # ui.transitTB.clicked.connect(selectGPKGfile)
+    # ui.pantryTB.clicked.connect(selectGPKGfile)
     # ui.linearTB.clicked.connect(selectLinearOutputfile)
     # ui.arealTB.clicked.connect(selectArealOutputfile)
     # ui.buttonBox.accepted.connect(runWaterbodyExtraction)
     # ui.buttonBox.rejected.connect(mainWindow.close)
+    # =======================================
+    # hardcoded aoi layer
+    #=======================================
+    vrtcs = [QgsPointXY(-104.99517, 39.76876), QgsPointXY(-104.97323, 39.77292), QgsPointXY(-104.97323, 39.74882), QgsPointXY(-104.99517, 39.75144)]
+    aoiPolygon = QgsGeometry.fromPolygonXY([vrtcs])
+    aoiFeature = QgsFeature()
+    aoiFeature.setGeometry(aoiPolygon)
+    aoiLayer = qgis.core.QgsVectorLayer("Polygon?crs=epsg:4326&field=NAME:string(50)&field=TYPE:string(10)&field=AREA:double", "Area of Interest", "memory")
+    areaOfInterest = aoiLayer.dataProvider().addFeatures([aoiFeature])
     # =======================================
     # run app
     # =======================================
