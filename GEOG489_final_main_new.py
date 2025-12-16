@@ -8,7 +8,7 @@ from qgis.core import *
 import sys,os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStyle, QFileDialog, QDialog, QMessageBox, QSizePolicy
 from PyQt5.QtGui import QStandardItemModel, QStandardItem,  QDoubleValidator, QIntValidator
-from PyQt5.QtCore import Qt, QVariant
+from PyQt5.QtCore import Qt, QVariant, QMetaType
 
 app = QApplication(sys.argv)
 qgis_prefix = os.getenv("QGIS_PREFIX_PATH")
@@ -59,115 +59,159 @@ for layer in layers:
     reprolayer.setName(f"clipped_{layer.name()}")
     clipped_layers.append(reprolayer)
 
-# print (clipped_layers)
-# for layer in clipped_layers:
-#     print(layer)
+def filterByQuery(layersList, layerNameSearch, query):
+    layer = [l for l in layersList if layerNameSearch in os.path.basename(l.name())][0]
+    filteredLayer = processing.run("qgis:extractbyexpression", {"INPUT": layer , "EXPRESSION": query, "OUTPUT": "memory:"})
+    return filteredLayer["OUTPUT"]
 
+def getBufferGeometry(layer, distanceScore):
+    buffers = []
+    for distance, score in distanceScore:
+        buffer = processing.run("native:buffer", {"INPUT": layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
+        bufferVectorLayer = buffer[ "OUTPUT"]
+        bufferGeom = next(bufferVectorLayer.getFeatures()).geometry()
+        buffers.append((bufferGeom, score))
 
+    return buffers
+
+def updateParcelLayer(parcelLayer, fieldName, bufferGeoms):
+    parcelLayer.startEditing()
+    newField = QgsField(fieldName, QMetaType.Double)
+    parcelLayer.dataProvider().addAttributes([newField])
+    parcelLayer.updateFields()
+
+    fieldIndex = parcelLayer.fields().indexOf(fieldName)
+
+    for parcel in parcelLayer.getFeatures():
+        updatedScore = 0
+        for bufferGeom, score in bufferGeoms:
+            if parcel.geometry().intersects(bufferGeom):
+                updatedScore = score
+                break
+        parcelLayer.changeAttributeValue(parcel.id(), fieldIndex, updatedScore)
+    parcelLayer.commitChanges()
+    return parcelLayer
 
 #FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
-query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
-clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
-commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
-commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
+# query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
+# clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
+# commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
+# commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
 
+filteredParcels = filterByQuery(clipped_layers, "Parcels", '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\'')
 # IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
 clippedPantriesLayer = [layer for layer in clipped_layers if "Existing_Pantries" in os.path.basename(layer.name())][0]
 pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer, "DISTANCE": 1000, "OUTPUT": "memory:"})
 pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
-commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
-commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
 
-#ADD FIELD TO PARCELS FOR TRANSIT SCORE, ADD THE SCORE
+parcelsXPantry = processing.run("native:extractbylocation", {"INPUT": filteredParcels, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
+parcelsXPantryLayer = parcelsXPantry[ "OUTPUT"]
+# commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
+# commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
+
 transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0]
-distanceScore = [(750, 1), (1500, 0.7), (3000, 0.3)]
-buffers = []
-for distance, scoreVal in distanceScore:
-    transitScore = processing.run("native:buffer", {"INPUT": transit_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
-    transitBuffer = transitScore[ "OUTPUT"]
-    buffer_geom = next(transitBuffer.getFeatures()).geometry()
-    buffers.append((buffer_geom, scoreVal))
+transit_buffers = getBufferGeometry(transit_layer, [(200, 1), (500, 0.7), (800, 0.3)])
+parcelsXTransitLayer = updateParcelLayer(parcelsXPantryLayer, "Transit_Score", transit_buffers)
 
-commercialOutsidePantriesLayer.startEditing()
+filteredPopDensity = filterByQuery(clipped_layers, "Population_Density", '"popdensity" > 15000')
+pop_density_buffers = getBufferGeometry(filteredPopDensity, [(0, 1), (2500, 0.7), (5000, 0.3)])
+parcelsXDensityLayer = updateParcelLayer(parcelsXTransitLayer, "Pop_Density_Score", pop_density_buffers)
+QgsVectorFileWriter.writeAsVectorFormat(parcelsXDensityLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", parcelsXDensityLayer.crs(), "GPKG")
 
-new_field = QgsField("Transit_Score", QVariant.Double)
-commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
-commercialOutsidePantriesLayer.updateFields()
 
-transitScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Transit_Score")
-
-for parcel in commercialOutsidePantriesLayer.getFeatures():
-    transit_score = 0
-    for bufferGeom, score in buffers:
-        if parcel.geometry().intersects(bufferGeom):
-            transit_score = score
-            break
-    commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), transitScoreIndex, transit_score)
-
-commercialOutsidePantriesLayer.commitChanges()
-
-# QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-
-# FILTER POP DENSITY BY DENSITY
-query = '"popdensity" > 15000'
-clippedPopDensity = [layer for layer in clipped_layers if "Population_Density" in os.path.basename(layer.name())][0]
-popDensity = processing.run("qgis:extractbyexpression", {"INPUT": clippedPopDensity , "EXPRESSION": query, "OUTPUT": "memory:"})
-popDensityLayer = popDensity[ "OUTPUT"]
-
-#ADD FIELD TO PARCELS FOR POPULATION DENSITY SCORE, ADD THE SCORE
-popDensity_layer = popDensityLayer
-popDensityScore = [(0, 1), (2500, 0.7), (5000, 0.3)]
-buffers = []
-for distance, scoreVal in popDensityScore:
-    popDensityScore = processing.run("native:buffer", {"INPUT": popDensity_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
-    popDensityBuffer = popDensityScore[ "OUTPUT"]
-    buffer_geom = next(popDensityBuffer.getFeatures()).geometry()
-    buffers.append((buffer_geom, scoreVal))
-
-commercialOutsidePantriesLayer.startEditing()
-
-new_field = QgsField("Pop_Density_Score", QVariant.Double)
-commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
-commercialOutsidePantriesLayer.updateFields()
-
-popDensityScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Pop_Density_Score")
-
-for parcel in commercialOutsidePantriesLayer.getFeatures():
-    pop_density_score = 0
-    for bufferGeom, score in buffers:
-        if parcel.geometry().intersects(bufferGeom):
-            pop_density_score = score
-            break
-    commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), popDensityScoreIndex, pop_density_score)
-
-commercialOutsidePantriesLayer.commitChanges()
-
-# QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-
-#CALCULATE SUITABILITY SCORE
-
-commercialOutsidePantriesLayer.startEditing()
-
-new_field = QgsField("Suitability", QVariant.Double)
-commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
-commercialOutsidePantriesLayer.updateFields()
-
-suitabilityIndex = commercialOutsidePantriesLayer.fields().indexOf("Suitability")
-
-# hard-coded user input weights
-transit_weight = 30
-normalized_transit_weight = (transit_weight / 100)
-pop_density_weight = 70
-normalized_pop_density_weight = (pop_density_weight / 100)
-
-for parcel in commercialOutsidePantriesLayer.getFeatures():
-    suitability = (parcel.attribute("Transit_Score") * normalized_transit_weight) + (parcel.attribute("Pop_Density_Score") * normalized_pop_density_weight)
-    commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), suitabilityIndex, suitability)
-
-commercialOutsidePantriesLayer.commitChanges()
-
-QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithSuitabilityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
-
+# #ADD FIELD TO PARCELS FOR TRANSIT SCORE, ADD THE SCORE
+# transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0] #select the transit layer
+# distanceScore = [(750, 1), (1500, 0.7), (3000, 0.3)] # defining distance, score values
+# buffers = [] # creating empty buffers list
+#
+# # for every distance and score in distanceScore list, create a buffer around each transit stop using distance val
+# for distance, scoreVal in distanceScore:
+#     transitScore = processing.run("native:buffer", {"INPUT": transit_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"}) # create the buffer around each transit stop, create a single geometry using dissolve = True, save the file to memory
+#     transitBuffer = transitScore[ "OUTPUT"]
+#     buffer_geom = next(transitBuffer.getFeatures()).geometry()
+#     buffers.append((buffer_geom, scoreVal))
+#
+# commercialOutsidePantriesLayer.startEditing() # start editing the memory layer
+#
+# #DECLARE THE NEW FIELD AND ADD IT TO THE LAYER
+# new_field = QgsField("Transit_Score", QVariant.Double)
+# commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
+# commercialOutsidePantriesLayer.updateFields()
+#
+# transitScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Transit_Score") # find the index of the new field
+#
+# # FOR EVERY FEATURE IN THE MEMORY LAYER, CHECK IF THE FEATURE INTERSECTS WITH ANY OF THE BUFFERS, IF SO, ASSIGN THE SCORE VALUE
+# for parcel in commercialOutsidePantriesLayer.getFeatures():
+#     transit_score = 0
+#     for bufferGeom, score in buffers:
+#         if parcel.geometry().intersects(bufferGeom):
+#             transit_score = score
+#             break
+#     commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), transitScoreIndex, transit_score)
+#
+# commercialOutsidePantriesLayer.commitChanges()
+#
+# # QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+#
+# # FILTER POP DENSITY BY DENSITY
+# query = '"popdensity" > 15000'
+# clippedPopDensity = [layer for layer in clipped_layers if "Population_Density" in os.path.basename(layer.name())][0]
+# popDensity = processing.run("qgis:extractbyexpression", {"INPUT": clippedPopDensity , "EXPRESSION": query, "OUTPUT": "memory:"})
+# popDensityLayer = popDensity[ "OUTPUT"]
+#
+# #ADD FIELD TO PARCELS FOR POPULATION DENSITY SCORE, ADD THE SCORE
+# popDensity_layer = popDensityLayer
+# popDensityScore = [(0, 1), (2500, 0.7), (5000, 0.3)]
+# buffers = []
+# for distance, scoreVal in popDensityScore:
+#     popDensityScore = processing.run("native:buffer", {"INPUT": popDensity_layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
+#     popDensityBuffer = popDensityScore[ "OUTPUT"]
+#     buffer_geom = next(popDensityBuffer.getFeatures()).geometry()
+#     buffers.append((buffer_geom, scoreVal))
+#
+# commercialOutsidePantriesLayer.startEditing()
+#
+# new_field = QgsField("Pop_Density_Score", QVariant.Double)
+# commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
+# commercialOutsidePantriesLayer.updateFields()
+#
+# popDensityScoreIndex = commercialOutsidePantriesLayer.fields().indexOf("Pop_Density_Score")
+#
+# for parcel in commercialOutsidePantriesLayer.getFeatures():
+#     pop_density_score = 0
+#     for bufferGeom, score in buffers:
+#         if parcel.geometry().intersects(bufferGeom):
+#             pop_density_score = score
+#             break
+#     commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), popDensityScoreIndex, pop_density_score)
+#
+# commercialOutsidePantriesLayer.commitChanges()
+#
+# # QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
+#
+# #CALCULATE SUITABILITY SCORE
+#
+# commercialOutsidePantriesLayer.startEditing()
+#
+# new_field = QgsField("Suitability", QVariant.Double)
+# commercialOutsidePantriesLayer.dataProvider().addAttributes([new_field])
+# commercialOutsidePantriesLayer.updateFields()
+#
+# suitabilityIndex = commercialOutsidePantriesLayer.fields().indexOf("Suitability")
+#
+# # hard-coded user input weights
+# transit_weight = 30
+# normalized_transit_weight = (transit_weight / 100)
+# pop_density_weight = 70
+# normalized_pop_density_weight = (pop_density_weight / 100)
+#
+# for parcel in commercialOutsidePantriesLayer.getFeatures():
+#     suitability = (parcel.attribute("Transit_Score") * normalized_transit_weight) + (parcel.attribute("Pop_Density_Score") * normalized_pop_density_weight)
+#     commercialOutsidePantriesLayer.changeAttributeValue(parcel.id(), suitabilityIndex, suitability)
+#
+# commercialOutsidePantriesLayer.commitChanges()
+#
+# QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithSuitabilityScore.gpkg", "utf-8", commercialBuildingsLayer.crs(), "GPKG")
 
 
 
@@ -177,5 +221,3 @@ QgsVectorFileWriter.writeAsVectorFormat(commercialOutsidePantriesLayer, r"C:\Use
 # transitBufferLayer = transitBuffer[ "OUTPUT"]
 # commercialRefinedByTransit = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 0,  "INTERSECT": transitBufferLayer, "OUTPUT": "memory:"})
 # commercialBuildingsLayer = commercialRefinedByTransit[ "OUTPUT"]
-
-
