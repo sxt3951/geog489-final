@@ -59,44 +59,44 @@ for layer in layers:
     reprolayer.setName(f"clipped_{layer.name()}")
     clipped_layers.append(reprolayer)
 
+#FUNCTION FOR FILTERING LAYER BY QUERY AND EXTRACTING THOSE FEATURES TO A NEW MEMORY LAYER
 def filterByQuery(layersList, layerNameSearch, query):
-    layer = [l for l in layersList if layerNameSearch in os.path.basename(l.name())][0]
-    filteredLayer = processing.run("qgis:extractbyexpression", {"INPUT": layer , "EXPRESSION": query, "OUTPUT": "memory:"})
-    return filteredLayer["OUTPUT"]
+    layer = [l for l in layersList if layerNameSearch in os.path.basename(l.name())][0] #find the layer from the list whose name contains layerNameSearch
+    filteredLayer = processing.run("qgis:extractbyexpression", {"INPUT": layer , "EXPRESSION": query, "OUTPUT": "memory:"}) #use processing to extract features based on the query
+    return filteredLayer["OUTPUT"] #create a new memory vector layer
 
+# FUNCTION TO RETURN A LIST OF BUFFER GEOMETRIES AND THEIR CORRESPONDING SCORE VALUES
 def getBufferGeometry(layer, distanceScore):
     buffers = []
+    # for every distance and score in distanceScore list, create a buffer around each feature in layer using distance val
     for distance, score in distanceScore:
-        buffer = processing.run("native:buffer", {"INPUT": layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"})
-        bufferVectorLayer = buffer[ "OUTPUT"]
-        bufferGeom = next(bufferVectorLayer.getFeatures()).geometry()
-        buffers.append((bufferGeom, score))
+        buffer = processing.run("native:buffer", {"INPUT": layer, "DISTANCE": distance, "DISSOLVE": True, "OUTPUT": "memory:"}) # create the buffer around each feature, create a single geometry using dissolve = True
+        bufferVectorLayer = buffer[ "OUTPUT"] # save the file to memory
+        bufferGeom = next(bufferVectorLayer.getFeatures()).geometry() # get the geometry of the first feature (there should only be one)
+        buffers.append((bufferGeom, score)) # append the geometry and score to the buffers list
 
     return buffers
 
-def updateParcelLayer(parcelLayer, fieldName, bufferGeoms):
-    parcelLayer.startEditing()
-    newField = QgsField(fieldName, QMetaType.Double)
+# FUNCTION TO ADD A NEW FIELD TO A PARCEL LAYER AND UPDATE THEIR VALUES BASED ON THE BUFFER GEOMETRIES
+def updateParcelLayer(parcelLayer, fieldName, bufferGeoms, weight):
+    parcelLayer.startEditing() # start editing the parcel layer (this is required for memory layers)
+    newField = QgsField(fieldName, QMetaType.Double) # create a new field with the specified name and type (double)
     parcelLayer.dataProvider().addAttributes([newField])
     parcelLayer.updateFields()
 
-    fieldIndex = parcelLayer.fields().indexOf(fieldName)
+    fieldIndex = parcelLayer.fields().indexOf(fieldName) # find the index of the new field
 
+    normalizeWeight = weight / 100
+    # for every feature in the parcel layer, check if the feature intersects with any of the buffers, if so, assign the corresponding score value
     for parcel in parcelLayer.getFeatures():
         updatedScore = 0
         for bufferGeom, score in bufferGeoms:
             if parcel.geometry().intersects(bufferGeom):
-                updatedScore = score
+                updatedScore = score * normalizeWeight
                 break
         parcelLayer.changeAttributeValue(parcel.id(), fieldIndex, updatedScore)
-    parcelLayer.commitChanges()
+    parcelLayer.commitChanges() #save the changes to the memory layer
     return parcelLayer
-
-#FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
-# query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
-# clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
-# commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
-# commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
 
 filteredParcels = filterByQuery(clipped_layers, "Parcels", '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\'')
 # IF PANTRY LOCATIONS ARE INCLUDED, GET THE MIN DISTANCE AND FIND COMMERCIAL BUILDINGS OUTSIDE OF THAT DISTANCE
@@ -106,18 +106,31 @@ pantriesBufferLayer = pantriesBuffer[ "OUTPUT"]
 
 parcelsXPantry = processing.run("native:extractbylocation", {"INPUT": filteredParcels, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
 parcelsXPantryLayer = parcelsXPantry[ "OUTPUT"]
-# commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
-# commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
 
 transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0]
 transit_buffers = getBufferGeometry(transit_layer, [(200, 1), (500, 0.7), (800, 0.3)])
-parcelsXTransitLayer = updateParcelLayer(parcelsXPantryLayer, "Transit_Score", transit_buffers)
+parcelsXTransitLayer = updateParcelLayer(parcelsXPantryLayer, "Transit_Score", transit_buffers, 10)
 
 filteredPopDensity = filterByQuery(clipped_layers, "Population_Density", '"popdensity" > 15000')
 pop_density_buffers = getBufferGeometry(filteredPopDensity, [(0, 1), (2500, 0.7), (5000, 0.3)])
-parcelsXDensityLayer = updateParcelLayer(parcelsXTransitLayer, "Pop_Density_Score", pop_density_buffers)
-QgsVectorFileWriter.writeAsVectorFormat(parcelsXDensityLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", parcelsXDensityLayer.crs(), "GPKG")
+parcelsXDensityLayer = updateParcelLayer(parcelsXTransitLayer, "Pop_Density_Score", pop_density_buffers, 30)
+# QgsVectorFileWriter.writeAsVectorFormat(parcelsXDensityLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithTransitScoreAndPopDensityScore.gpkg", "utf-8", parcelsXDensityLayer.crs(), "GPKG")
 
+filteredPoverty = filterByQuery(clipped_layers, "Poverty", '"Percent_Po" >= 20')
+poverty_buffers = getBufferGeometry(filteredPoverty, [(0, 1), (15840, .5), (26400, .2)])
+parcelsXPovertyLayer = updateParcelLayer(parcelsXDensityLayer, "Poverty_Score", poverty_buffers, 60)
+QgsVectorFileWriter.writeAsVectorFormat(parcelsXDensityLayer, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithpovscore.gpkg", "utf-8", parcelsXDensityLayer.crs(), "GPKG")
+
+
+
+
+#FILTER BUILDINGS BY ATTRIBUTE SO WE JUST HAVE COMMERCIAL BUILDINGS
+# query = '"D_CLASS_CN" = \'COMMERCIAL-RETAIL\''
+# clippedParcelsLayer = [layer for layer in clipped_layers if "Parcels" in os.path.basename(layer.name())][0]
+# commercialBuildings = processing.run("qgis:extractbyexpression", {"INPUT": clippedParcelsLayer , "EXPRESSION": query, "OUTPUT": "memory:"})
+# commercialBuildingsLayer = commercialBuildings[ "OUTPUT"]
+# commercialRefinedByPantries = processing.run("native:extractbylocation", {"INPUT": commercialBuildingsLayer, "PREDICATE": 2, "INTERSECT": pantriesBufferLayer, "OUTPUT": "memory:"})
+# commercialOutsidePantriesLayer = commercialRefinedByPantries[ "OUTPUT"]
 
 # #ADD FIELD TO PARCELS FOR TRANSIT SCORE, ADD THE SCORE
 # transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0] #select the transit layer
