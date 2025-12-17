@@ -241,12 +241,7 @@ def selectPantryGPKGFile():
     if fileName:
         ui.pantryLineEdit.setText(fileName)
 
-def selectAOIFile():
-    fileName, _ = QFileDialog.getOpenFileName(mainWindow,"Select GPKG file", "","GPKG (*.gpkg)")
-    if fileName:
-        ui.AOIlineEdit.setText(fileName)
-
-def selectOutputfile():    # get the output filename for areal features from the user and add the path to the text box
+def selectOutputfile():
     fileName, _ = QFileDialog.getSaveFileName(mainWindow, "Save new output file as", "", "GPKG (*.gpkg)")
     if fileName:
         ui.OutputlineEdit.setText(fileName)
