@@ -12,16 +12,6 @@ from qgis.gui import QgsMapToolPan, QgsMapToolZoom
 import ui_food_pantry_location
 import map_pop_up
 
-# app = QApplication(sys.argv)
-# qgis_prefix = os.getenv("QGIS_PREFIX_PATH")
-# qgis.core.QgsApplication.setPrefixPath(qgis_prefix, True)
-# qgs = qgis.core.QgsApplication([], False)
-# qgs.initQgis()
-
-# sys.path.append(os.path.join(qgis_prefix, "python", "plugins"))
-# import processing
-# from processing.core.Processing import Processing
-# Processing.initialize()
 
 #PROCESSING LOOK UP
 # print([x.id() for x in QgsApplication.processingRegistry().algorithms() if "convert" in x.id()])
@@ -75,18 +65,16 @@ def findSuitableParcels():
     parcels = ui.parcelsLineEdit.text()
     poverty = ui.povertyLineEdit.text()
     povertyValue = ui.povertyValLineEdit.text()
-    povertyWeight = float(ui.poverty_weightLineEdit.text())
+    povertyWeight = int(ui.poverty_weightLineEdit.text())
     pop_density = ui.pop_densityLineEdit.text()
     pop_densityValue = ui.pop_densityValLineEdit.text()
-    pop_densityWeight = float(ui.pop_density_weightLineEdit.text())
+    pop_densityWeight = int(ui.pop_density_weightLineEdit.text())
     transit_stops = ui.transitLineEdit.text()
-    transitWeight = float(ui.transit_weightLineEdit.text())
+    transitWeight = ui.transit_weightLineEdit.text()
     existing_pantries = ui.pantryLineEdit.text()
-    pantry_distance = float(ui.pantry_distLineEdit.text()) * 5280
+    pantry_distance = ui.pantry_distLineEdit.text()
     aoiPolygon = ui.AOIlineEdit.text()
-
-    # (39.76876, -104.99517), (39.77292, -104.97323), (39.74882, -104.97323), (39.75144, -104.99517)
-
+    outputFile = ui.OutputlineEdit.text()
 
     # CREATE THE AOI LAYER FROM THE USER INPUT
     coordPairs = aoiPolygon.split("),") # split the string by the closing parenthesis
@@ -143,7 +131,7 @@ def findSuitableParcels():
         # find the pantries layer
         clippedPantriesLayer = [layer for layer in clipped_layers if "Existing_Pantries" in os.path.basename(layer.name())][0]
         # buffer the pantries layer by the specified distance and create a new memory layer
-        pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer, "DISTANCE": pantry_distance,
+        pantriesBuffer = processing.run("native:buffer", {"INPUT": clippedPantriesLayer, "DISTANCE": float(pantry_distance)*5280,
                                                           "OUTPUT": "memory:"})
         pantriesBufferLayer = pantriesBuffer["OUTPUT"]
         # extract the parcels that are outside of the pantries buffer, predicate = 2 indicates we are extracting by disjoint aka featurs that do NOT intersect the buffer
@@ -161,7 +149,7 @@ def findSuitableParcels():
         transit_layer = [l for l in clipped_layers if l.name() == "clipped_Transit_Stops"][0]
         # create the buffers and assign scores
         transit_buffers = getBufferGeometry(transit_layer, [(200, 1), (500, 0.7), (800, 0.3)])
-        updatedParcels = updateParcelLayer(updatedParcels, "Transit_Score", transit_buffers, transitWeight)
+        updatedParcels = updateParcelLayer(updatedParcels, "Transit_Score", transit_buffers, int(transitWeight))
 
     #CREATE BUFFERS AROUND POVERTY TRACTS AND ASSIGN SCORE VALUES TO THE PARCELS THAT INTERSECT WITH THEM
     # filter to only use tracts with a poverty % greater than the user input
@@ -205,59 +193,7 @@ def findSuitableParcels():
 
     updatedParcels.commitChanges()
 
-    QgsVectorFileWriter.writeAsVectorFormat(updatedParcels, r"C:\Users\Sarah\Documents\GitHub\geog489-final\commercialBuildingsWithSuitabilityScoreNEW.gpkg", "utf-8", updatedParcels.crs(), "GPKG")
-
-class MyWnd(QMainWindow):
-
-    def __init__(self, layer):
-
-        QMainWindow.__init__(self)
-
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
-
-        self.canvas = self.ui.widget
-        self.canvas.setCanvasColor(Qt.white)
-
-        self.canvas.setExtent(layer.extent())
-        self.canvas.setLayers([layer])
-
-        self.actionZoomIn = QAction("Zoom in", self)
-        self.actionZoomOut = QAction("Zoom out", self)
-        self.actionPan = QAction("Pan", self)
-
-        self.actionZoomIn.setCheckable(True)
-        self.actionZoomOut.setCheckable(True)
-        self.actionPan.setCheckable(True)
-
-        self.actionZoomIn.triggered.connect(self.zoomIn)
-        self.actionZoomOut.triggered.connect(self.zoomOut)
-        self.actionPan.triggered.connect(self.pan)
-
-        # self.toolbar = self.addToolBar("Canvas actions")
-        # self.toolbar.addAction(self.actionZoomIn)
-        # self.toolbar.addAction(self.actionZoomOut)
-        # self.toolbar.addAction(self.actionPan)
-
-        # create the map tools
-        self.toolPan = QgsMapToolPan(self.canvas)
-        self.toolPan.setAction(self.actionPan)
-        self.toolZoomIn = QgsMapToolZoom(self.canvas, False) # false = in
-        self.toolZoomIn.setAction(self.actionZoomIn)
-        self.toolZoomOut = QgsMapToolZoom(self.canvas, True) # true = out
-        self.toolZoomOut.setAction(self.actionZoomOut)
-
-        self.pan()
-
-
-    def zoomIn(self):
-        self.canvas.setMapTool(self.toolZoomIn)
-
-    def zoomOut(self):
-        self.canvas.setMapTool(self.toolZoomOut)
-
-    def pan(self):
-        self.canvas.setMapTool(self.toolPan)
+    QgsVectorFileWriter.writeAsVectorFormat(updatedParcels, outputFile, "utf-8", updatedParcels.crs(), "GPKG")
 
 
 #FUNCTION TO GET PARCEL FILE FROM USER
@@ -298,7 +234,7 @@ def selectAOIFile():
 def selectOutputfile():    # get the output filename for areal features from the user and add the path to the text box
     fileName, _ = QFileDialog.getSaveFileName(mainWindow, "Save new output file as", "", "GPKG (*.gpkg)")
     if fileName:
-        ui..setText(fileName)
+        ui.OutputlineEdit.setText(fileName)
 
 if __name__ == '__main__':
     # set up QGIS application and processing environment
@@ -321,11 +257,7 @@ if __name__ == '__main__':
     mainWindow = QMainWindow()
     ui = ui_food_pantry_location.Ui_MainWindow()
     ui.setupUi(mainWindow)
-
-    # createShapefileDialog = QDialog(mainWindow)
-    # createShapefileDialog_ui = gui_newshapefile.Ui_Dialog()
-    # createShapefileDialog_ui.setupUi(createShapefileDialog)
-
+    mainWindow.ui = ui
 
     # ==========================================
     # connect signals
@@ -335,25 +267,13 @@ if __name__ == '__main__':
     ui.pop_densityTB.clicked.connect(selectPopDensityGPKGFile)
     ui.transitTB.clicked.connect(selectTransitGPKGFile)
     ui.pantryTB.clicked.connect(selectPantryGPKGFile)
-    ui.aoiTB.clicked.connect(selectAOIFile)
+    ui.outputTB.clicked.connect(selectOutputfile)
     ui.buttonBox.accepted.connect(findSuitableParcels)
     ui.buttonBox.rejected.connect(mainWindow.close)
-    # ui.povertyTB.clicked.connect(selectGPKGfile)
-    # ui.pop_densityTB.clicked.connect(selectGPKGfile)
-    # ui.transitTB.clicked.connect(selectGPKGfile)
-    # ui.pantryTB.clicked.connect(selectGPKGfile)
-    # ui.linearTB.clicked.connect(selectLinearOutputfile)
-    # ui.arealTB.clicked.connect(selectArealOutputfile)
-    # ui.buttonBox.accepted.connect(runWaterbodyExtraction)
-    # ui.buttonBox.rejected.connect(mainWindow.close)
-    # =======================================
-    # hardcoded aoi layer
-    #=======================================
+    ui.actionExit.triggered.connect(mainWindow.close)
     # =======================================
     # run app
     # =======================================
     mainWindow.show()
 
-    # win = MyWnd(clipped_test)
-    # win.show()
     sys.exit(app.exec_())
