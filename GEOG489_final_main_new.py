@@ -195,6 +195,21 @@ def findSuitableParcels():
 
     QgsVectorFileWriter.writeAsVectorFormat(updatedParcels, outputFile, "utf-8", updatedParcels.crs(), "GPKG")
 
+#FUNCTION TO OPEN MAPVIEW DIALOGUE
+def openMapView():
+    # create vector layer from the output file
+    layer = QgsVectorLayer(ui.OutputlineEdit.text(), "Suitability Parcels", "ogr")
+
+    #add the layer to the map widget
+    createMapDialog_ui.widget.setLayers([layer])
+    createMapDialog_ui.widget.setExtent(layer.extent())
+    createMapDialog_ui.widget.refresh()
+
+
+def processAndOpenMap():
+    findSuitableParcels()
+    openMapView()
+
 
 #FUNCTION TO GET PARCEL FILE FROM USER
 def selectParcelGPKGfile():       # get the input file from the user and add the path to the text box
@@ -259,6 +274,9 @@ if __name__ == '__main__':
     ui.setupUi(mainWindow)
     mainWindow.ui = ui
 
+    createMapDialog = QDialog(mainWindow)
+    createMapDialog_ui = map_pop_up.Ui_Dialog()
+    createMapDialog_ui.setupUi(createMapDialog)
     # ==========================================
     # connect signals
     # ==========================================
@@ -268,7 +286,7 @@ if __name__ == '__main__':
     ui.transitTB.clicked.connect(selectTransitGPKGFile)
     ui.pantryTB.clicked.connect(selectPantryGPKGFile)
     ui.outputTB.clicked.connect(selectOutputfile)
-    ui.buttonBox.accepted.connect(findSuitableParcels)
+    ui.buttonBox.accepted.connect(processAndOpenMap)
     ui.buttonBox.rejected.connect(mainWindow.close)
     ui.actionExit.triggered.connect(mainWindow.close)
     # =======================================
