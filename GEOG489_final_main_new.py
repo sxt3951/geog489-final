@@ -196,19 +196,25 @@ def findSuitableParcels():
     QgsVectorFileWriter.writeAsVectorFormat(updatedParcels, outputFile, "utf-8", updatedParcels.crs(), "GPKG")
 
 #FUNCTION TO OPEN MAPVIEW DIALOGUE
-def openMapView():
-    # create vector layer from the output file
-    layer = QgsVectorLayer(ui.OutputlineEdit.text(), "Suitability Parcels", "ogr")
-
-    #add the layer to the map widget
-    createMapDialog_ui.widget.setLayers([layer])
-    createMapDialog_ui.widget.setExtent(layer.extent())
-    createMapDialog_ui.widget.refresh()
-
-
-def processAndOpenMap():
-    findSuitableParcels()
-    openMapView()
+# def openMapView():
+#     # create vector layer from the output file
+#     layer = QgsVectorLayer(ui.OutputlineEdit.text(), "Suitability Parcels", "ogr")
+#     mapCanvas = createMapDialog_ui.widget
+#
+#     createMapDialog.show()
+#     QApplication.processEvents()  # make sure layout is updated
+#
+#     mapCanvas.setDestinationCrs(layer.crs())
+#     mapCanvas.setLayers([layer])
+#     mapCanvas.zoomToFullExtent()
+#     mapCanvas.refresh()
+#
+#     createMapDialog.raise_()
+#     createMapDialog.activateWindow()
+#
+# def processAndOpenMap():
+#     findSuitableParcels()
+#     openMapView()
 
 
 #FUNCTION TO GET PARCEL FILE FROM USER
@@ -268,10 +274,10 @@ if __name__ == '__main__':
     ui = ui_food_pantry_location.Ui_MainWindow()
     ui.setupUi(mainWindow)
     mainWindow.ui = ui
-
-    createMapDialog = QDialog(mainWindow)
-    createMapDialog_ui = map_pop_up.Ui_Dialog()
-    createMapDialog_ui.setupUi(createMapDialog)
+    #
+    # createMapDialog = QDialog(mainWindow)
+    # createMapDialog_ui = map_pop_up.Ui_Dialog()
+    # createMapDialog_ui.setupUi(createMapDialog)
     # ==========================================
     # connect signals
     # ==========================================
@@ -281,7 +287,7 @@ if __name__ == '__main__':
     ui.transitTB.clicked.connect(selectTransitGPKGFile)
     ui.pantryTB.clicked.connect(selectPantryGPKGFile)
     ui.outputTB.clicked.connect(selectOutputfile)
-    ui.buttonBox.accepted.connect(processAndOpenMap)
+    ui.buttonBox.accepted.connect(findSuitableParcels)
     ui.buttonBox.rejected.connect(mainWindow.close)
     ui.actionExit.triggered.connect(mainWindow.close)
     # =======================================
